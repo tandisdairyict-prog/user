@@ -1,0 +1,433 @@
+{% extends 'org_chart/base.html' %}
+{% load static %}
+
+{% block title %}نمودار سازمانی | پورتال سازمانی{% endblock %}
+{% block nav_chart %}active{% endblock %}
+
+{% block content %}
+<div class="org-page">
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div>
+                <h1 class="page-title">
+                    <i class="bi bi-diagram-3 me-2"></i>نمودار سازمانی
+                </h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0" id="breadcrumb">
+                        <li class="breadcrumb-item active">نمای کلی</li>
+                    </ol>
+                </nav>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <!-- Company Selector -->
+                <div class="company-selector">
+                    <label class="form-label-sm mb-0 ms-2 text-muted">شرکت:</label>
+                    <select class="form-select form-select-sm" id="companySelector" style="min-width:200px">
+                        {% for company in companies %}
+                        <option value="{{ company.id }}" {% if company.id == selected_company_id %}selected{% endif %}>
+                            {{ company.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="org-layout">
+
+        <!-- LEFT PANEL: Tree -->
+        <div class="tree-panel" id="treePanel">
+            <div class="panel-header">
+                <!-- Search Bar -->
+                <div class="tree-search-wrap">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0">
+                            <i class="bi bi-search text-muted"></i>
+                        </span>
+                        <input type="text" id="searchInput" class="form-control border-start-0"
+                               placeholder="جستجو در شرکت، واحد، پست، پرسنل...">
+                        <button class="btn btn-outline-secondary" id="clearSearchBtn" title="پاک کردن">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Toolbar -->
+                <div class="tree-toolbar">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-toolbar" id="expandAllBtn" title="باز کردن همه">
+                            <i class="bi bi-arrows-expand"></i>
+                            <span class="d-none d-md-inline ms-1">باز کردن همه</span>
+                        </button>
+                        <button class="btn btn-toolbar" id="collapseAllBtn" title="بستن همه">
+                            <i class="bi bi-arrows-collapse"></i>
+                            <span class="d-none d-md-inline ms-1">بستن همه</span>
+                        </button>
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-toolbar" id="zoomOutBtn" title="کوچک‌تر">
+                            <i class="bi bi-zoom-out"></i>
+                        </button>
+                        <button class="btn btn-toolbar zoom-level-btn" id="zoomResetBtn" title="بازنشانی">
+                            <span id="zoomLevel">100%</span>
+                        </button>
+                        <button class="btn btn-toolbar" id="zoomInBtn" title="بزرگ‌تر">
+                            <i class="bi bi-zoom-in"></i>
+                        </button>
+                    </div>
+                    <button class="btn btn-toolbar btn-sm" id="fullscreenBtn" title="تمام‌صفحه">
+                        <i class="bi bi-fullscreen"></i>
+                    </button>
+                    <button class="btn btn-toolbar btn-sm" id="refreshBtn" title="بارگذاری مجدد">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search Results Bar -->
+            <div class="search-results-bar d-none" id="searchResultsBar">
+                <i class="bi bi-search me-2"></i>
+                <span id="searchResultsText"></span>
+                <button class="btn btn-sm btn-link text-decoration-none p-0 ms-2" id="clearSearchInline">
+                    پاک کردن
+                </button>
+            </div>
+
+            <!-- Tree Container -->
+            <div class="tree-container" id="treeContainer">
+                <div class="tree-zoom-wrap" id="treeZoomWrap">
+                    <div class="tree-inner" id="treeInner">
+                        <!-- Loading State -->
+                        <div class="tree-loading" id="treeLoading">
+                            <div class="spinner-border text-primary mb-3" role="status"></div>
+                            <div class="text-muted">در حال بارگذاری نمودار...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: Detail -->
+        <div class="detail-panel" id="detailPanel">
+            <!-- Empty State -->
+            <div class="detail-empty" id="detailEmpty">
+                <div class="detail-empty-icon">
+                    <i class="bi bi-diagram-3"></i>
+                </div>
+                <h5>یک گره را انتخاب کنید</h5>
+                <p class="text-muted small">
+                    روی هر گره در نمودار کلیک کنید تا جزئیات آن نمایش داده شود
+                </p>
+            </div>
+
+            <!-- Detail Content -->
+            <div class="detail-content d-none" id="detailContent">
+                <!-- Node Badge + Title -->
+                <div class="detail-node-header" id="detailNodeHeader">
+                </div>
+
+                <!-- Tabs -->
+                <ul class="nav nav-tabs detail-tabs mt-3" id="detailTabs">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabInfo">
+                            <i class="bi bi-info-circle me-1"></i>اطلاعات
+                        </button>
+                    </li>
+                    <li class="nav-item" id="tabPermissionsLi" style="display:none">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabPermissions">
+                            <i class="bi bi-shield-check me-1"></i>دسترسی‌ها
+                        </button>
+                    </li>
+                    <li class="nav-item" id="tabHistoryLi">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHistory">
+                            <i class="bi bi-clock-history me-1"></i>تاریخچه
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content detail-tab-content" id="detailTabContent">
+                    <!-- Info Tab -->
+                    <div class="tab-pane fade show active" id="tabInfo">
+                        <div id="detailInfoBody"></div>
+
+                        <!-- Action Buttons -->
+                        <div class="detail-actions mt-4" id="detailActions"></div>
+                    </div>
+
+                    <!-- Permissions Tab -->
+                    <div class="tab-pane fade" id="tabPermissions">
+                        <div id="detailPermissionsBody">
+                            <div class="text-center py-4 text-muted">
+                                <i class="bi bi-shield-check fs-2 d-block mb-2"></i>
+                                در حال بارگذاری...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- History Tab -->
+                    <div class="tab-pane fade" id="tabHistory">
+                        <div id="detailHistoryBody">
+                            <div class="text-center py-4 text-muted">
+                                <i class="bi bi-clock-history fs-2 d-block mb-2"></i>
+                                در حال بارگذاری...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Context Menu -->
+<div class="context-menu" id="contextMenu">
+    <ul class="context-menu-list" id="contextMenuList"></ul>
+</div>
+
+<!-- ═══════════════════════ MODALS ═══════════════════════ -->
+
+<!-- Add Node Modal -->
+<div class="modal fade" id="addNodeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addNodeModalTitle">افزودن گره جدید</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addNodeForm">
+                    <input type="hidden" id="addNodeParentId">
+                    <input type="hidden" id="addNodeParentType">
+                    <input type="hidden" id="addNodeType">
+                    <input type="hidden" id="addNodeCompanyId">
+
+                    <div class="mb-3">
+                        <label class="form-label">نوع گره</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="newNodeType" id="rdoDept" value="department">
+                                <label class="form-check-label" for="rdoDept">
+                                    <i class="bi bi-building text-purple me-1"></i>واحد سازمانی
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="newNodeType" id="rdoPos" value="position" checked>
+                                <label class="form-check-label" for="rdoPos">
+                                    <i class="bi bi-person-badge text-secondary me-1"></i>پست سازمانی
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">نام <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="addNodeName" placeholder="نام گره جدید" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">کد <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="addNodeCode" placeholder="کد یکتا" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-primary" id="addNodeSubmitBtn">
+                    <i class="bi bi-plus-lg me-1"></i>ایجاد
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign User Modal -->
+<div class="modal fade" id="assignUserModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-person-plus me-2"></i>تخصیص پرسنل به پست
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="assignUserPositionId">
+                <div class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="employeeSearchInput"
+                               placeholder="جستجو بر اساس نام یا شماره پرسنلی...">
+                    </div>
+                </div>
+                <div id="employeeListContainer" class="employee-list-container">
+                    <div class="text-center text-muted py-3">
+                        <div class="spinner-border spinner-border-sm me-2"></div>در حال بارگذاری...
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-primary" id="assignUserSubmitBtn" disabled>
+                    <i class="bi bi-check-lg me-1"></i>تخصیص
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Role Modal -->
+<div class="modal fade" id="assignRoleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-shield-plus me-2"></i>مدیریت نقش‌های پست
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="assignRolePositionId">
+                <div id="currentRolesSection" class="mb-3">
+                    <label class="form-label fw-semibold">نقش‌های فعلی:</label>
+                    <div id="currentRolesList"></div>
+                </div>
+                <hr>
+                <div>
+                    <label class="form-label fw-semibold">افزودن نقش:</label>
+                    <div id="roleListContainer" class="role-list-container"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">بستن</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Permissions Modal -->
+<div class="modal fade" id="permissionsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-shield-lock me-2"></i>مدیریت دسترسی‌ها
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="permissionsModalBody">
+                <div class="text-center text-muted py-4">
+                    <div class="spinner-border"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">بستن</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle me-2"></i>تایید حذف</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>آیا از حذف <strong id="deleteNodeName"></strong> اطمینان دارید؟</p>
+                <p class="text-muted small">این عملیات قابل بازگشت نیست.</p>
+                <input type="hidden" id="deleteNodeId">
+                <input type="hidden" id="deleteNodeType">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-danger btn-sm" id="confirmDeleteBtn">
+                    <i class="bi bi-trash me-1"></i>حذف
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rename Modal -->
+<div class="modal fade" id="renameModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>تغییر نام</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="renameNodeId">
+                <input type="hidden" id="renameNodeType">
+                <div class="mb-3">
+                    <label class="form-label">نام جدید</label>
+                    <input type="text" class="form-control" id="renameInput">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-primary btn-sm" id="renameSubmitBtn">
+                    <i class="bi bi-check me-1"></i>ذخیره
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- History Modal -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>تاریخچه عملیات</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="historyModalBody">
+                <div class="text-center py-4"><div class="spinner-border"></div></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">بستن</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Drag Confirm Modal -->
+<div class="modal fade" id="dragConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrows-move me-2"></i>تایید جابجایی</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="dragConfirmText"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"
+                        id="dragCancelBtn">انصراف</button>
+                <button type="button" class="btn btn-primary btn-sm" id="dragConfirmBtn">
+                    <i class="bi bi-check me-1"></i>تایید
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.ORG_CONFIG = {
+        apiBase: '/org/api/',
+        initialCompanyId: {{ selected_company_id|default:"null" }},
+        csrfToken: '{{ csrf_token }}',
+    };
+</script>
+{% load static %}
+<script src="{% static 'org_chart/js/org_chart.js' %}"></script>
+{% endblock %}
